@@ -29,7 +29,13 @@ type User = {
   vote: number
 }
 
+type Room = {
+  roomCode: string
+  users: User[]
+}
+
 let users: User[] = []
+let rooms: Room[] = []
 
 function findUserById(socketId: string) {
   return users.find(user => user.socketId === socketId)
@@ -58,6 +64,7 @@ socketIo.on(SocketEvents.connect, (socket: Socket) => {
   })
 
   socket.on(SocketEvents.createRoom, (userData: User) => {
+    users = []
     let number = ''
     for (let i = 0; i < 3; i++) {
       number = number + Math.floor(Math.random() * 10)
@@ -75,13 +82,25 @@ socketIo.on(SocketEvents.connect, (socket: Socket) => {
 
     users.push(user)
 
+    const room: Room = {
+      roomCode: roomNumber,
+      users,
+    }
+
+    rooms.push(room)
+
     socket.join(roomNumber)
     socket.emit(SocketEvents.sentRoom, roomNumber)
     socket.emit(SocketEvents.me, user)
-    socketIo.to(roomNumber).emit(SocketEvents.allUsers, users)
+    socketIo.to(roomNumber).emit(SocketEvents.allUsers, room.users)
   })
 
   socket.on(SocketEvents.joinRoom, (userData: User) => {
+    const roomFound = rooms.find(room => room.roomCode === userData.roomCode)
+    if (roomFound) {
+      users = roomFound.users
+    }
+
     const user: User = {
       socketId: socket.id,
       name: userData.name,
@@ -92,10 +111,16 @@ socketIo.on(SocketEvents.connect, (socket: Socket) => {
 
     users.push(user)
 
+    rooms.forEach(room => {
+      if (room.roomCode === roomFound?.roomCode) {
+        room.users = users
+      }
+    })
+
     socket.join(user.roomCode!)
     socket.emit(SocketEvents.sentRoom, user.roomCode)
     socket.emit(SocketEvents.me, user)
-    socketIo.to(user.roomCode!).emit(SocketEvents.allUsers, users)
+    socketIo.to(user.roomCode!).emit(SocketEvents.allUsers, roomFound?.users)
   })
 
   socket.on(SocketEvents.toVote, (vote: number) => {
